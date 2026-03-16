@@ -2,7 +2,7 @@ use crate::lmu_telemetry::{SharedMemoryObjectOut, SharedMemoryReader};
 use flate2::{write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
     time::Duration,
@@ -92,7 +92,7 @@ pub fn start(buffer_dir: PathBuf, state: Arc<Mutex<RecorderState>>) {
 
 // ── Recording loop ────────────────────────────────────────────────────────────
 
-fn run_loop(buffer_dir: &PathBuf, state: &Arc<Mutex<RecorderState>>) {
+fn run_loop(buffer_dir: &Path, state: &Arc<Mutex<RecorderState>>) {
     const POLL_INTERVAL: Duration = Duration::from_millis(50); // 20 Hz
 
     let mut reader: Option<SharedMemoryReader> = None;
@@ -209,7 +209,7 @@ fn finalize_lap(
     player_idx: usize,
     lap_number: i32,
     samples: Vec<TelemetrySample>,
-    buffer_dir: &PathBuf,
+    buffer_dir: &Path,
 ) {
     // Find the player's scoring entry to get lap/sector times and car class.
     let scoring = data
@@ -312,7 +312,7 @@ fn set_state(
     }
 }
 
-fn count_pending(buffer_dir: &PathBuf) -> usize {
+fn count_pending(buffer_dir: &Path) -> usize {
     std::fs::read_dir(buffer_dir)
         .map(|entries| {
             entries
