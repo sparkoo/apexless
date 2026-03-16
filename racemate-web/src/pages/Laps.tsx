@@ -7,7 +7,7 @@ export function Laps() {
   const [laps, setLaps] = useState<LapMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { selected, toggle } = useCompare();
+  const { selected, lockedClass, toggle } = useCompare();
 
   useEffect(() => {
     api.laps.list().then(setLaps).catch((e) => setError(e.message)).finally(() => setLoading(false));
@@ -59,11 +59,13 @@ export function Laps() {
                   {trackLaps.map((lap, i) => {
                     const selIdx = selected.findIndex((l) => l.id === lap.id);
                     const sel = selIdx !== -1;
+                    const incompatible = !sel && lockedClass !== null && lap.car_class !== lockedClass;
                     const delta = lap.lap_time_ms - best;
                     return (
                       <tr
                         key={lap.id}
-                        class={`border-t border-[var(--border)] ${i === 0 ? "border-t-0" : ""} ${sel ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]"} transition-colors`}
+                        title={incompatible ? `Class mismatch — selection locked to ${lockedClass}` : undefined}
+                        class={`border-t border-[var(--border)] ${i === 0 ? "border-t-0" : ""} ${incompatible ? "opacity-30 cursor-not-allowed" : sel ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)] cursor-pointer"} transition-colors`}
                       >
                         <td class="px-4 py-2.5">
                           <span class="text-[var(--text)]">{lap.car_name}</span>

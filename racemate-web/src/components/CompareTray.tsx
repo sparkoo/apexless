@@ -5,7 +5,7 @@ import { formatLapTime } from "@/lib/types";
 const LABELS = ["A", "B"] as const;
 
 export function CompareTray() {
-  const { selected, remove, clear } = useCompare();
+  const { selected, lockedClass, remove, clear } = useCompare();
   const [, navigate] = useLocation();
 
   if (selected.length === 0) return null;
@@ -17,6 +17,11 @@ export function CompareTray() {
   return (
     <div class="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-sm px-5 py-3">
       <div class="max-w-4xl mx-auto flex items-center gap-4">
+        {lockedClass && (
+          <span class="text-xs text-[var(--muted)] border border-[var(--border)] rounded px-2 py-1 shrink-0">
+            {lockedClass}
+          </span>
+        )}
         <div class="flex items-center gap-3 flex-1">
           {LABELS.map((label, i) => {
             const lap = selected[i];

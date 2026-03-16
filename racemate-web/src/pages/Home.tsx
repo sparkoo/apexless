@@ -7,7 +7,7 @@ import { useCompare } from "@/lib/compare-context";
 
 export function Home() {
   const [recentLaps, setRecentLaps] = useState<LapMetadata[]>([]);
-  const { selected, toggle } = useCompare();
+  const { selected, lockedClass, toggle } = useCompare();
 
   useEffect(() => {
     api.laps.list().then((laps) => setRecentLaps(laps.slice(0, 10))).catch(() => {});
@@ -65,11 +65,13 @@ export function Home() {
                 {recentLaps.map((lap, i) => {
                   const selIdx = selected.findIndex((l) => l.id === lap.id);
                   const sel = selIdx !== -1;
+                  const incompatible = !sel && lockedClass !== null && lap.car_class !== lockedClass;
                   return (
                     <tr
                       key={lap.id}
-                      onClick={() => toggle(lap)}
-                      class={`border-t border-[var(--border)] cursor-pointer transition-colors ${i === 0 ? "border-t-0" : ""} ${sel ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]"}`}
+                      onClick={() => !incompatible && toggle(lap)}
+                      title={incompatible ? `Class mismatch — selection locked to ${lockedClass}` : undefined}
+                      class={`border-t border-[var(--border)] transition-colors ${i === 0 ? "border-t-0" : ""} ${incompatible ? "opacity-30 cursor-not-allowed" : sel ? "bg-[var(--surface)] cursor-pointer" : "hover:bg-[var(--surface)] cursor-pointer"}`}
                     >
                       <td class="px-4 py-2.5 text-[var(--muted)]">{lap.username ?? "—"}</td>
                       <td class="px-4 py-2.5">{lap.track_name ?? lap.track_id}</td>
