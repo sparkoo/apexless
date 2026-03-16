@@ -1,7 +1,7 @@
 import { useState, useEffect } from "preact/hooks";
 import { useLocation } from "wouter";
 import { api } from "@/lib/api";
-import { LapMetadata, formatLapTime } from "@/lib/types";
+import { LapMetadata, formatLapTime, formatDelta } from "@/lib/types";
 
 export function Laps() {
   const [laps, setLaps] = useState<LapMetadata[]>([]);
@@ -28,12 +28,15 @@ export function Laps() {
     }
   };
 
-  // Group laps by track
+  // Group laps by track, sorted fastest-first within each group
   const byTrack = laps.reduce<Record<string, LapMetadata[]>>((acc, lap) => {
     const key = lap.track_name ?? lap.track_id;
     (acc[key] ??= []).push(lap);
     return acc;
   }, {});
+  for (const key of Object.keys(byTrack)) {
+    byTrack[key].sort((a, b) => a.lap_time_ms - b.lap_time_ms);
+  }
 
   if (loading) return <p class="text-[var(--muted)]">Loading...</p>;
   if (error) return <p class="text-red-500">{error}</p>;
@@ -52,64 +55,78 @@ export function Laps() {
         </button>
       </div>
 
-      {Object.entries(byTrack).map(([track, trackLaps]) => (
-        <div key={track}>
-          <h2 class="text-sm font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">{track}</h2>
-          <div class="border border-[var(--border)] rounded-lg overflow-hidden">
-            <table class="w-full text-sm">
-              <thead class="border-b border-[var(--border)] text-[var(--muted)]">
-                <tr>
-                  <th class="text-left px-4 py-2 font-normal">Car</th>
-                  <th class="text-right px-4 py-2 font-normal">Lap</th>
-                  <th class="text-right px-4 py-2 font-normal">Time</th>
-                  <th class="text-right px-4 py-2 font-normal">S1</th>
-                  <th class="text-right px-4 py-2 font-normal">S2</th>
-                  <th class="text-right px-4 py-2 font-normal">S3</th>
-                  <th class="text-right px-4 py-2 font-normal">Date</th>
-                  <th class="px-4 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {trackLaps.map((lap, i) => {
-                  const sel = selected.includes(lap.id);
-                  const selIdx = selected.indexOf(lap.id);
-                  return (
-                    <tr
-                      key={lap.id}
-                      class={`border-t border-[var(--border)] ${i === 0 ? "border-t-0" : ""} ${sel ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]"} transition-colors`}
-                    >
-                      <td class="px-4 py-2.5">
-                        <span class="text-[var(--text)]">{lap.car_name}</span>
-                        <span class="ml-2 text-xs text-[var(--muted)]">{lap.car_class}</span>
-                      </td>
-                      <td class="px-4 py-2.5 text-right text-[var(--muted)]">{lap.lap_number}</td>
-                      <td class="px-4 py-2.5 text-right font-mono font-semibold">{formatLapTime(lap.lap_time_ms)}</td>
-                      <td class="px-4 py-2.5 text-right font-mono text-[var(--muted)]">{lap.s1_ms ? formatLapTime(lap.s1_ms) : "—"}</td>
-                      <td class="px-4 py-2.5 text-right font-mono text-[var(--muted)]">{lap.s2_ms ? formatLapTime(lap.s2_ms) : "—"}</td>
-                      <td class="px-4 py-2.5 text-right font-mono text-[var(--muted)]">{lap.s3_ms ? formatLapTime(lap.s3_ms) : "—"}</td>
-                      <td class="px-4 py-2.5 text-right text-[var(--muted)]">
-                        {new Date(lap.recorded_at).toLocaleDateString()}
-                      </td>
-                      <td class="px-4 py-2.5 text-right">
-                        <button
-                          onClick={() => toggle(lap.id)}
-                          class={`px-2 py-0.5 text-xs rounded border transition-colors ${
-                            sel
-                              ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
-                              : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--text)]"
-                          }`}
-                        >
-                          {sel ? (selIdx === 0 ? "A" : "B") : "Select"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {Object.entries(byTrack).map(([track, trackLaps]) => {
+        const best = trackLaps[0].lap_time_ms;
+        return (
+          <div key={track}>
+            <div class="flex items-baseline gap-3 mb-2">
+              <h2 class="text-sm font-semibold text-[var(--text)] uppercase tracking-wider">{track}</h2>
+              <span class="text-xs text-[var(--muted)]">{trackLaps.length} lap{trackLaps.length !== 1 ? "s" : ""}</span>
+              <span class="text-xs font-mono text-[var(--muted)]">best {formatLapTime(best)}</span>
+            </div>
+            <div class="border border-[var(--border)] rounded-lg overflow-hidden">
+              <table class="w-full text-sm">
+                <thead class="border-b border-[var(--border)] text-[var(--muted)]">
+                  <tr>
+                    <th class="text-left px-4 py-2 font-normal">Car</th>
+                    <th class="text-right px-4 py-2 font-normal">Lap</th>
+                    <th class="text-right px-4 py-2 font-normal">Time</th>
+                    <th class="text-right px-4 py-2 font-normal">Delta</th>
+                    <th class="text-right px-4 py-2 font-normal">S1</th>
+                    <th class="text-right px-4 py-2 font-normal">S2</th>
+                    <th class="text-right px-4 py-2 font-normal">S3</th>
+                    <th class="text-right px-4 py-2 font-normal">Date</th>
+                    <th class="px-4 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {trackLaps.map((lap, i) => {
+                    const sel = selected.includes(lap.id);
+                    const selIdx = selected.indexOf(lap.id);
+                    const delta = lap.lap_time_ms - best;
+                    return (
+                      <tr
+                        key={lap.id}
+                        class={`border-t border-[var(--border)] ${i === 0 ? "border-t-0" : ""} ${sel ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]"} transition-colors`}
+                      >
+                        <td class="px-4 py-2.5">
+                          <span class="text-[var(--text)]">{lap.car_name}</span>
+                          <span class="ml-2 text-xs text-[var(--muted)]">{lap.car_class}</span>
+                        </td>
+                        <td class="px-4 py-2.5 text-right text-[var(--muted)]">{lap.lap_number}</td>
+                        <td class={`px-4 py-2.5 text-right font-mono font-semibold ${i === 0 ? "text-[var(--green)]" : ""}`}>
+                          {formatLapTime(lap.lap_time_ms)}
+                        </td>
+                        <td class="px-4 py-2.5 text-right font-mono text-[var(--muted)]">
+                          {i === 0 ? <span class="text-[var(--green)]">—</span> : formatDelta(delta)}
+                        </td>
+                        <td class="px-4 py-2.5 text-right font-mono text-[var(--muted)]">{lap.s1_ms ? formatLapTime(lap.s1_ms) : "—"}</td>
+                        <td class="px-4 py-2.5 text-right font-mono text-[var(--muted)]">{lap.s2_ms ? formatLapTime(lap.s2_ms) : "—"}</td>
+                        <td class="px-4 py-2.5 text-right font-mono text-[var(--muted)]">{lap.s3_ms ? formatLapTime(lap.s3_ms) : "—"}</td>
+                        <td class="px-4 py-2.5 text-right text-[var(--muted)]">
+                          {new Date(lap.recorded_at).toLocaleDateString()}
+                        </td>
+                        <td class="px-4 py-2.5 text-right">
+                          <button
+                            onClick={() => toggle(lap.id)}
+                            class={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                              sel
+                                ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
+                                : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--text)]"
+                            }`}
+                          >
+                            {sel ? (selIdx === 0 ? "A" : "B") : "Select"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
