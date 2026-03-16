@@ -50,11 +50,11 @@ func main() {
 	})
 
 	r.Route("/api", func(r chi.Router) {
-		r.Use(api.RequireAuth)
-
-		r.Post("/laps", api.UploadLap(pool, store))
-		r.Post("/sessions", api.UploadSession(pool))
+		r.Get("/laps", api.ListLaps(pool))
 		r.Get("/compare", api.Compare(pool, store))
+
+		r.With(api.RequireAuth).Post("/laps", api.UploadLap(pool, store))
+		r.With(api.RequireAuth).Post("/sessions", api.UploadSession(pool))
 	})
 
 	port := os.Getenv("PORT")

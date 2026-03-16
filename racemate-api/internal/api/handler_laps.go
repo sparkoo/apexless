@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,6 +33,79 @@ type UploadLapRequest struct {
 	// via multipart form, or the entire .json.gz is sent as the body.
 }
 
+// ListLaps handles GET /api/laps (public — no auth required).
+// Optional query param: user_id to filter by a specific user.
+func ListLaps(db *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		filterUserID := r.URL.Query().Get("user_id")
+
+		query := `
+			SELECT l.id, l.user_id, l.track_id, l.car_id,
+			       l.lap_number, l.lap_time_ms, l.s1_ms, l.s2_ms, l.s3_ms,
+			       l.is_valid, l.sample_rate_hz, l.recorded_at, l.telemetry_url,
+			       t.name AS track_name, c.name AS car_name, c.class AS car_class,
+			       u.username
+			FROM laps l
+			JOIN tracks t ON t.id = l.track_id
+			JOIN cars c ON c.id = l.car_id
+			LEFT JOIN users u ON u.id = l.user_id`
+
+		var args []any
+		if filterUserID != "" {
+			query += ` WHERE l.user_id = $1`
+			args = append(args, filterUserID)
+		}
+		query += ` ORDER BY l.recorded_at DESC LIMIT 100`
+
+		rows, err := db.Query(r.Context(), query, args...)
+		if err != nil {
+			http.Error(w, "db error", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		type LapRow struct {
+			ID           string  `json:"id"`
+			UserID       string  `json:"user_id"`
+			TrackID      string  `json:"track_id"`
+			CarID        string  `json:"car_id"`
+			LapNumber    int     `json:"lap_number"`
+			LapTimeMs    uint32  `json:"lap_time_ms"`
+			S1Ms         *uint32 `json:"s1_ms"`
+			S2Ms         *uint32 `json:"s2_ms"`
+			S3Ms         *uint32 `json:"s3_ms"`
+			IsValid      bool    `json:"is_valid"`
+			SampleRateHz uint32  `json:"sample_rate_hz"`
+			RecordedAt   string  `json:"recorded_at"`
+			TelemetryURL *string `json:"telemetry_url"`
+			TrackName    string  `json:"track_name"`
+			CarName      string  `json:"car_name"`
+			CarClass     string  `json:"car_class"`
+			Username     *string `json:"username"`
+		}
+
+		laps := []LapRow{}
+		for rows.Next() {
+			var l LapRow
+			var recordedAt time.Time
+			if err := rows.Scan(
+				&l.ID, &l.UserID, &l.TrackID, &l.CarID,
+				&l.LapNumber, &l.LapTimeMs, &l.S1Ms, &l.S2Ms, &l.S3Ms,
+				&l.IsValid, &l.SampleRateHz, &recordedAt, &l.TelemetryURL,
+				&l.TrackName, &l.CarName, &l.CarClass, &l.Username,
+			); err != nil {
+				http.Error(w, "db scan error", http.StatusInternalServerError)
+				return
+			}
+			l.RecordedAt = recordedAt.Format(time.RFC3339)
+			laps = append(laps, l)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(laps)
+	}
+}
+
 // UploadLap handles POST /api/laps
 // The desktop app sends the raw .json.gz file as the request body.
 // We store it in Supabase Storage and record metadata in the DB.
@@ -47,10 +121,14 @@ func UploadLap(db *pgxpool.Pool, store *storage.Client) http.HandlerFunc {
 			return
 		}
 
-		// Parse only the metadata from a JSON header sent in X-Lap-Metadata.
-		// This avoids decompressing the full telemetry blob on every write.
+		// Parse metadata from X-Lap-Metadata header (base64-encoded JSON).
+		metaBytes, err := base64.StdEncoding.DecodeString(r.Header.Get("X-Lap-Metadata"))
+		if err != nil {
+			http.Error(w, "invalid X-Lap-Metadata encoding", http.StatusBadRequest)
+			return
+		}
 		var meta LapMetadata
-		if err := json.Unmarshal([]byte(r.Header.Get("X-Lap-Metadata")), &meta); err != nil {
+		if err := json.Unmarshal(metaBytes, &meta); err != nil {
 			http.Error(w, "invalid X-Lap-Metadata header", http.StatusBadRequest)
 			return
 		}

@@ -1,5 +1,5 @@
-import { Router, Route, Redirect } from "wouter";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { Router, Route } from "wouter";
+import { AuthProvider } from "@/lib/auth";
 import { Nav } from "@/components/Nav";
 import { Home } from "@/pages/Home";
 import { Compare } from "@/pages/Compare";
@@ -7,17 +7,9 @@ import { Sessions } from "@/pages/Sessions";
 import { Laps } from "@/pages/Laps";
 import { Login } from "@/pages/Login";
 
-function AppRoutes() {
-  const { session, loading } = useAuth();
-
-  if (loading) return null;
-
-  if (!session) {
-    return <Login />;
-  }
-
+export function App() {
   return (
-    <>
+    <AuthProvider>
       <Nav />
       <main class="p-5">
         <Router>
@@ -25,19 +17,9 @@ function AppRoutes() {
           <Route path="/laps" component={Laps} />
           <Route path="/compare" component={Compare} />
           <Route path="/sessions" component={Sessions} />
-          <Route path="/login">
-            <Redirect to="/" />
-          </Route>
+          <Route path="/login" component={Login} />
         </Router>
       </main>
-    </>
-  );
-}
-
-export function App() {
-  return (
-    <AuthProvider>
-      <AppRoutes />
     </AuthProvider>
   );
 }

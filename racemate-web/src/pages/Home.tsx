@@ -1,36 +1,109 @@
+import { useState, useEffect } from "preact/hooks";
 import { Link } from "wouter";
+import { api } from "@/lib/api";
+import type { LapMetadata } from "@/lib/types";
+import { formatLapTime } from "@/lib/types";
 
 export function Home() {
+  const [recentLaps, setRecentLaps] = useState<LapMetadata[]>([]);
+
+  useEffect(() => {
+    api.laps.list().then((laps) => setRecentLaps(laps.slice(0, 10))).catch(() => {});
+  }, []);
+
   return (
-    <div class="max-w-2xl mx-auto mt-16 flex flex-col gap-8">
-      <div>
-        <h1 class="text-3xl font-bold mb-2">RaceMate</h1>
-        <p class="text-[var(--muted)]">
-          Simracing lap comparison and race stats. Record your laps, upload them,
-          and find exactly where you lose time.
+    <div class="max-w-4xl mx-auto flex flex-col gap-14 mt-10">
+
+      {/* Hero */}
+      <div class="flex flex-col gap-5">
+        <h1 class="text-5xl font-bold tracking-tight">
+          <span class="text-[var(--accent)]">Race</span>Mate
+        </h1>
+        <p class="text-lg text-[var(--muted)] max-w-lg leading-relaxed">
+          Simracing lap comparison and race stats. Record your laps with the desktop app, upload them, and find exactly where you lose time.
         </p>
+        <div class="flex gap-3">
+          <Link
+            href="/laps"
+            class="px-5 py-2 bg-[var(--accent)] text-white rounded text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            Browse Laps
+          </Link>
+          <Link
+            href="/compare"
+            class="px-5 py-2 border border-[var(--border)] rounded text-sm font-medium hover:border-[var(--accent)] transition-colors"
+          >
+            Compare Laps
+          </Link>
+        </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
-        <Link
-          href="/compare"
-          class="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-5 hover:border-[var(--accent)] transition-colors"
-        >
-          <p class="text-lg font-semibold mb-1">Compare Laps</p>
-          <p class="text-sm text-[var(--muted)]">
-            Overlay two laps on the track map with full telemetry and delta analysis.
+      {/* Recent laps */}
+      {recentLaps.length > 0 && (
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-xs font-semibold text-[var(--muted)] uppercase tracking-widest">Recent Laps</h2>
+            <Link href="/laps" class="text-xs text-[var(--muted)] hover:text-[var(--text)] transition-colors">
+              View all →
+            </Link>
+          </div>
+          <div class="border border-[var(--border)] rounded-lg overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="border-b border-[var(--border)] text-[var(--muted)]">
+                <tr>
+                  <th class="text-left px-4 py-2.5 font-normal">Driver</th>
+                  <th class="text-left px-4 py-2.5 font-normal">Track</th>
+                  <th class="text-left px-4 py-2.5 font-normal">Car</th>
+                  <th class="text-right px-4 py-2.5 font-normal">Time</th>
+                  <th class="text-right px-4 py-2.5 font-normal">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentLaps.map((lap, i) => (
+                  <tr
+                    key={lap.id}
+                    class={`border-t border-[var(--border)] hover:bg-[var(--surface)] transition-colors ${i === 0 ? "border-t-0" : ""}`}
+                  >
+                    <td class="px-4 py-2.5 text-[var(--muted)]">{lap.username ?? "—"}</td>
+                    <td class="px-4 py-2.5">{lap.track_name ?? lap.track_id}</td>
+                    <td class="px-4 py-2.5 text-[var(--muted)]">
+                      {lap.car_name}
+                      {lap.car_class && <span class="ml-2 text-xs opacity-60">{lap.car_class}</span>}
+                    </td>
+                    <td class="px-4 py-2.5 text-right font-mono font-semibold">{formatLapTime(lap.lap_time_ms)}</td>
+                    <td class="px-4 py-2.5 text-right text-[var(--muted)]">
+                      {new Date(lap.recorded_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Feature cards */}
+      <div class="grid grid-cols-3 gap-4">
+        <div class="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-5">
+          <p class="text-sm font-semibold mb-1">Lap Comparison</p>
+          <p class="text-xs text-[var(--muted)] leading-relaxed">
+            Overlay two laps on the track map with speed, throttle, braking, and delta charts.
           </p>
-        </Link>
-        <Link
-          href="/sessions"
-          class="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-5 hover:border-[var(--accent)] transition-colors"
-        >
-          <p class="text-lg font-semibold mb-1">Race Sessions</p>
-          <p class="text-sm text-[var(--muted)]">
-            Browse results, lap times, and tyre data from your race sessions.
+        </div>
+        <div class="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-5">
+          <p class="text-sm font-semibold mb-1">Race Sessions</p>
+          <p class="text-xs text-[var(--muted)] leading-relaxed">
+            Browse full session results, lap times, sector splits, and tyre data.
           </p>
-        </Link>
+        </div>
+        <div class="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-5">
+          <p class="text-sm font-semibold mb-1">Desktop Recorder</p>
+          <p class="text-xs text-[var(--muted)] leading-relaxed">
+            Windows app records telemetry at 20Hz directly from LMU shared memory and uploads automatically.
+          </p>
+        </div>
       </div>
+
     </div>
   );
 }
