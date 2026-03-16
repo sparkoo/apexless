@@ -7,6 +7,8 @@ pub struct Settings {
     pub api_url: String,
     /// Supabase JWT for authenticated uploads. Empty = not logged in.
     pub auth_token: String,
+    /// Email of the signed-in user. Empty = not logged in.
+    pub user_email: String,
     /// Auto-upload completed laps/results, or wait for manual trigger.
     pub auto_upload: bool,
     /// Path to the LMU results XML folder.
@@ -18,6 +20,7 @@ impl Default for Settings {
         Self {
             api_url: "http://localhost:8080".to_string(),
             auth_token: String::new(),
+            user_email: String::new(),
             auto_upload: false,
             lmu_results_dir: String::new(),
         }

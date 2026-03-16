@@ -4,12 +4,161 @@ mod settings;
 mod telemetry;
 mod upload;
 
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
+use tauri_plugin_opener::OpenerExt;
+
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use sha2::{Digest, Sha256};
 
 use settings::Settings;
 use telemetry::{RecorderState, RecorderStatus};
+
+// ── Auth constants ─────────────────────────────────────────────────────────────
+
+const SUPABASE_URL: &str = "https://xviegnvxvozhmsjcsadm.supabase.co";
+const SUPABASE_ANON_KEY: &str = "sb_publishable_htKKYfihafYb58YgSMdNQw_qybOL-hh";
+const OAUTH_CALLBACK_PORT: u16 = 54321;
+
+// ── Auth helpers ───────────────────────────────────────────────────────────────
+
+fn pkce_pair() -> (String, String) {
+    let verifier: String = (0..64)
+        .map(|_| {
+            let r = rand::random::<u8>() % 62;
+            if r < 10 { (b'0' + r) as char }
+            else if r < 36 { (b'a' + r - 10) as char }
+            else { (b'A' + r - 36) as char }
+        })
+        .collect();
+    let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
+    (verifier, challenge)
+}
+
+fn extract_code(request_line: &str) -> Option<String> {
+    // "GET /?code=xxx&state=yyy HTTP/1.1"
+    let path = request_line.split_whitespace().nth(1)?;
+    let query = path.split('?').nth(1)?;
+    query.split('&')
+        .find(|p| p.starts_with("code="))
+        .map(|p| p.trim_start_matches("code=").to_string())
+}
+
+fn exchange_pkce(code: &str, verifier: &str) -> Result<(String, String), String> {
+    let resp = ureq::post(&format!("{}/auth/v1/token?grant_type=pkce", SUPABASE_URL))
+        .set("apikey", SUPABASE_ANON_KEY)
+        .set("Content-Type", "application/json")
+        .send_json(serde_json::json!({
+            "auth_code": code,
+            "code_verifier": verifier,
+        }))
+        .map_err(|e| e.to_string())?;
+
+    let body: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
+    let access_token = body["access_token"].as_str().unwrap_or("").to_string();
+    let email = body["user"]["email"].as_str().unwrap_or("").to_string();
+
+    if access_token.is_empty() {
+        return Err(format!("No access_token in response: {}", body));
+    }
+    Ok((access_token, email))
+}
+
+// ── Auth commands ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn login_oauth(
+    provider: String,
+    settings: tauri::State<Arc<Mutex<Settings>>>,
+    config_dir: tauri::State<ConfigDir>,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    let (verifier, challenge) = pkce_pair();
+
+    let settings_clone = settings.inner().clone();
+    let config_dir_path = config_dir.0.clone();
+
+    std::thread::spawn(move || {
+        let listener = match TcpListener::bind(format!("127.0.0.1:{}", OAUTH_CALLBACK_PORT)) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("[auth] Port {} unavailable: {}", OAUTH_CALLBACK_PORT, e);
+                return;
+            }
+        };
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                let mut reader = BufReader::new(&stream);
+                let mut request_line = String::new();
+                reader.read_line(&mut request_line).ok();
+
+                // Drain remaining headers
+                let mut line = String::new();
+                while reader.read_line(&mut line).is_ok() {
+                    if line == "\r\n" || line.is_empty() { break; }
+                    line.clear();
+                }
+
+                // Respond to the browser
+                let html = r#"<!DOCTYPE html><html><head><style>body{background:#111113;color:#e8e8ea;font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#1c1c1f;border:1px solid #2a2a2e;border-radius:12px;padding:40px;text-align:center}h1{color:#e8304a;font-size:1.1rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}p{color:#8a8a92;font-size:.9rem}</style></head><body><div class="card"><h1>RaceMate</h1><p>Signed in! You can close this tab.</p></div></body></html>"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    html.len(), html
+                );
+                stream.write_all(response.as_bytes()).ok();
+                drop(stream);
+
+                if let Some(code) = extract_code(&request_line) {
+                    match exchange_pkce(&code, &verifier) {
+                        Ok((token, email)) => {
+                            let mut s = settings_clone.lock().unwrap();
+                            s.auth_token = token;
+                            s.user_email = email.clone();
+                            s.save(&config_dir_path);
+                            eprintln!("[auth] Signed in as {}", email);
+                        }
+                        Err(e) => eprintln!("[auth] Token exchange failed: {}", e),
+                    }
+                } else {
+                    eprintln!("[auth] No code in redirect: {}", request_line.trim());
+                }
+            }
+            Err(e) => eprintln!("[auth] Accept error: {}", e),
+        }
+    });
+
+    let auth_url = format!(
+        "{}/auth/v1/authorize?provider={}&redirect_to=http://127.0.0.1:{}/&code_challenge={}&code_challenge_method=S256",
+        SUPABASE_URL, provider, OAUTH_CALLBACK_PORT, challenge
+    );
+    app.opener().open_url(&auth_url, None::<&str>).map_err(|e| e.to_string())?;
+
+    Ok("Browser opened — complete sign-in to continue.".to_string())
+}
+
+#[tauri::command]
+fn logout(
+    settings: tauri::State<Arc<Mutex<Settings>>>,
+    config_dir: tauri::State<ConfigDir>,
+) {
+    let mut s = settings.lock().unwrap();
+    s.auth_token = String::new();
+    s.user_email = String::new();
+    s.save(&config_dir.0);
+}
+
+#[tauri::command]
+fn get_auth_status(settings: tauri::State<Arc<Mutex<Settings>>>) -> serde_json::Value {
+    let s = settings.lock().unwrap();
+    serde_json::json!({
+        "is_authenticated": s.is_authenticated(),
+        "email": s.user_email,
+    })
+}
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
@@ -158,6 +307,9 @@ pub fn run() {
             upload_now,
             get_settings,
             save_settings,
+            login_oauth,
+            logout,
+            get_auth_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

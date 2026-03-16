@@ -31,6 +31,35 @@
           </div>
         </div>
       </section>
+
+      <section class="card">
+        <h2>Account</h2>
+        <div id="account-content">
+          <span class="auth-loading">Loading...</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Settings</h2>
+        <form id="settings-form">
+          <div class="field">
+            <label for="api_url">API URL</label>
+            <input id="api_url" name="api_url" type="text" placeholder="http://localhost:8080" />
+          </div>
+          <div class="field">
+            <label for="lmu_results_dir">LMU Results Folder</label>
+            <input id="lmu_results_dir" name="lmu_results_dir" type="text" placeholder="Leave blank for default" />
+          </div>
+          <div class="field field--row">
+            <input id="auto_upload" name="auto_upload" type="checkbox" />
+            <label for="auto_upload">Auto-upload every 30s</label>
+          </div>
+          <div class="settings-footer">
+            <span id="settings-msg" class="settings-msg"></span>
+            <button type="submit">Save</button>
+          </div>
+        </form>
+      </section>
     </main>
   </body>
 </html>
