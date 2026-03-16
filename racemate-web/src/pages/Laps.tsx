@@ -1,32 +1,17 @@
 import { useState, useEffect } from "preact/hooks";
-import { useLocation } from "wouter";
 import { api } from "@/lib/api";
 import { LapMetadata, formatLapTime, formatDelta } from "@/lib/types";
+import { useCompare } from "@/lib/compare-context";
 
 export function Laps() {
   const [laps, setLaps] = useState<LapMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [, navigate] = useLocation();
+  const { selected, toggle } = useCompare();
 
   useEffect(() => {
     api.laps.list().then(setLaps).catch((e) => setError(e.message)).finally(() => setLoading(false));
   }, []);
-
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 2) return [prev[1], id];
-      return [...prev, id];
-    });
-  };
-
-  const compare = () => {
-    if (selected.length === 2) {
-      navigate(`/compare?lap_a=${selected[0]}&lap_b=${selected[1]}`);
-    }
-  };
 
   // Group laps by track, sorted fastest-first within each group
   const byTrack = laps.reduce<Record<string, LapMetadata[]>>((acc, lap) => {
@@ -44,16 +29,7 @@ export function Laps() {
 
   return (
     <div class="max-w-4xl mx-auto flex flex-col gap-6">
-      <div class="flex items-center justify-between">
-        <h1 class="text-xl font-bold">Laps</h1>
-        <button
-          onClick={compare}
-          disabled={selected.length < 2}
-          class="px-4 py-1.5 text-sm rounded bg-[var(--accent)] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-        >
-          Compare {selected.length}/2
-        </button>
-      </div>
+      <h1 class="text-xl font-bold">Laps</h1>
 
       {Object.entries(byTrack).map(([track, trackLaps]) => {
         const best = trackLaps[0].lap_time_ms;
@@ -81,8 +57,8 @@ export function Laps() {
                 </thead>
                 <tbody>
                   {trackLaps.map((lap, i) => {
-                    const sel = selected.includes(lap.id);
-                    const selIdx = selected.indexOf(lap.id);
+                    const selIdx = selected.findIndex((l) => l.id === lap.id);
+                    const sel = selIdx !== -1;
                     const delta = lap.lap_time_ms - best;
                     return (
                       <tr
@@ -108,7 +84,7 @@ export function Laps() {
                         </td>
                         <td class="px-4 py-2.5 text-right">
                           <button
-                            onClick={() => toggle(lap.id)}
+                            onClick={() => toggle(lap)}
                             class={`px-2 py-0.5 text-xs rounded border transition-colors ${
                               sel
                                 ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
