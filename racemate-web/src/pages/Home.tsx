@@ -1,16 +1,18 @@
 import { useState, useEffect } from "preact/hooks";
 import { Link } from "wouter";
 import { api } from "@/lib/api";
-import type { LapMetadata } from "@/lib/types";
+import type { LapMetadata, Session } from "@/lib/types";
 import { formatLapTime } from "@/lib/types";
 import { useCompare } from "@/lib/compare-context";
 
 export function Home() {
   const [recentLaps, setRecentLaps] = useState<LapMetadata[]>([]);
+  const [recentSessions, setRecentSessions] = useState<Session[]>([]);
   const { selected, lockedClass, toggle } = useCompare();
 
   useEffect(() => {
     api.laps.list().then((laps) => setRecentLaps(laps.slice(0, 10))).catch(() => {});
+    api.sessions.list().then((sessions) => setRecentSessions(sessions.slice(0, 5))).catch(() => {});
   }, []);
 
   return (
@@ -93,6 +95,49 @@ export function Home() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Recent sessions */}
+      {recentSessions.length > 0 && (
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-xs font-semibold text-[var(--muted)] uppercase tracking-widest">Recent Sessions</h2>
+            <Link href="/sessions" class="text-xs text-[var(--muted)] hover:text-[var(--text)] transition-colors">
+              View all →
+            </Link>
+          </div>
+          <div class="border border-[var(--border)] rounded-lg overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="border-b border-[var(--border)] text-[var(--muted)]">
+                <tr>
+                  <th class="text-left px-4 py-2.5 font-normal">Event</th>
+                  <th class="text-left px-4 py-2.5 font-normal">Track</th>
+                  <th class="text-left px-4 py-2.5 font-normal">Type</th>
+                  <th class="text-right px-4 py-2.5 font-normal">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentSessions.map((session, i) => (
+                  <tr
+                    key={session.id}
+                    class={`border-t border-[var(--border)] hover:bg-[var(--surface)] transition-colors ${i === 0 ? "border-t-0" : ""}`}
+                  >
+                    <td class="px-4 py-2.5">
+                      <Link href={`/sessions/${session.id}`} class="hover:text-[var(--accent)] transition-colors">
+                        {session.event_name || "—"}
+                      </Link>
+                    </td>
+                    <td class="px-4 py-2.5 text-[var(--muted)]">{session.track?.name ?? session.track_id}</td>
+                    <td class="px-4 py-2.5 text-[var(--muted)]">{session.session_type}</td>
+                    <td class="px-4 py-2.5 text-right text-[var(--muted)]">
+                      {new Date(session.started_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
