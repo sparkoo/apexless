@@ -328,7 +328,7 @@ export function Home() {
                         ) : (fastestLap && !isAlreadyFastest && (
                           <Link
                             href={`/compare?lap_a=${lap.id}&lap_b=${fastestLap.id}`}
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e: MouseEvent) => e.stopPropagation()}
                             class="text-xs text-[var(--accent)] hover:opacity-80 transition-opacity whitespace-nowrap"
                           >
                             Compare →
