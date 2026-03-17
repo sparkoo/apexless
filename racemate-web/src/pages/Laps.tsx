@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "preact/hooks";
+import { Fragment } from "preact";
 import { useLocation } from "wouter";
 import { api } from "@/lib/api";
 import { LapMetadata, formatLapTime, formatDelta } from "@/lib/types";
@@ -49,33 +50,38 @@ export function Laps() {
     clear();
   };
 
-  const filtered = activeTrack ? byClassLaps.filter((l) => (l.track_name ?? l.track_id) === activeTrack) : [];
-  const sortedLaps = [...filtered].sort((a, b) => a.lap_time_ms - b.lap_time_ms);
-  const best = sortedLaps[0]?.lap_time_ms ?? 0;
+  const { sortedLaps, best, leaderboard } = useMemo(() => {
+    const byTrack = activeTrack
+      ? byClassLaps.filter((l) => (l.track_name ?? l.track_id) === activeTrack)
+      : [];
+    const sorted = [...byTrack].sort((a, b) => a.lap_time_ms - b.lap_time_ms);
+    const bestTime = sorted[0]?.lap_time_ms ?? 0;
 
-  const leaderboard = useMemo((): DriverEntry[] => {
-    if (sortedLaps.length === 0) return [];
+    if (sorted.length === 0) return { sortedLaps: sorted, best: bestTime, leaderboard: [] as DriverEntry[] };
+
     const byDriver = new Map<string, LapMetadata[]>();
-    for (const lap of sortedLaps) {
+    for (const lap of sorted) {
       const existing = byDriver.get(lap.user_id);
       if (existing) existing.push(lap);
       else byDriver.set(lap.user_id, [lap]);
     }
     const entries: DriverEntry[] = [];
-    byDriver.forEach((laps, userId) => {
+    byDriver.forEach((driverLaps, userId) => {
       entries.push({
         userId,
-        username: laps[0].username ?? userId.slice(0, 8),
-        bestLap: laps[0],
-        allLaps: laps,
+        username: driverLaps[0].username ?? userId.slice(0, 8),
+        bestLap: driverLaps[0],
+        allLaps: driverLaps,
         rank: 0,
         deltaToP1: 0,
       });
     });
     entries.sort((a, b) => a.bestLap.lap_time_ms - b.bestLap.lap_time_ms);
     const p1Time = entries[0].bestLap.lap_time_ms;
-    return entries.map((e, i) => ({ ...e, rank: i + 1, deltaToP1: e.bestLap.lap_time_ms - p1Time }));
-  }, [sortedLaps]);
+    const lb = entries.map((e, i) => ({ ...e, rank: i + 1, deltaToP1: e.bestLap.lap_time_ms - p1Time }));
+
+    return { sortedLaps: sorted, best: bestTime, leaderboard: lb };
+  }, [laps, activeClass, activeTrack]);
 
   const toggleExpand = (userId: string) =>
     setExpandedDriver((prev) => (prev === userId ? null : userId));
@@ -168,10 +174,9 @@ export function Laps() {
                   const isExpanded = expandedDriver === entry.userId;
 
                   return (
-                    <>
+                    <Fragment key={entry.userId}>
                       {/* Leaderboard row — one per driver */}
                       <tr
-                        key={entry.userId}
                         onClick={() => toggleExpand(entry.userId)}
                         class={`border-t border-[var(--border)] cursor-pointer transition-colors ${entry.rank === 1 ? "border-t-0" : ""} ${
                           isUser
@@ -269,7 +274,7 @@ export function Laps() {
                           </tr>
                         );
                       })}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
