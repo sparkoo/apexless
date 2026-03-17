@@ -96,11 +96,16 @@ export function Home() {
 
   // Fetch global fastest lap per track+class for the competitive gap display
   useEffect(() => {
-    if (personalBests.length === 0) return;
+    if (personalBests.length === 0) {
+      setFastestByTrackClass(new Map());
+      return;
+    }
+    let cancelled = false;
     const trackIds = [...new Set(personalBests.map((pb) => pb.lap.track_id))];
     Promise.all(
       trackIds.map((trackId) => api.laps.list(trackId).catch(() => [] as LapMetadata[])),
     ).then((results) => {
+      if (cancelled) return;
       const fastest = new Map<string, LapMetadata>();
       for (const laps of results) {
         for (const lap of laps) {
@@ -113,6 +118,7 @@ export function Home() {
       }
       setFastestByTrackClass(fastest);
     });
+    return () => { cancelled = true; };
   }, [personalBests]);
 
   const stats = useMemo(() => {
@@ -308,8 +314,8 @@ export function Home() {
                       <td class="px-4 py-2.5 text-right font-mono text-[var(--muted)]">
                         {fastestLap ? formatLapTime(fastestLap.lap_time_ms) : "—"}
                       </td>
-                      <td class={`px-4 py-2.5 text-right font-mono text-xs ${isAlreadyFastest ? "text-[var(--green)]" : "text-[var(--red)]"}`}>
-                        {gap !== null ? (isAlreadyFastest ? "Fastest!" : `${formatDelta(gap)}s`) : "—"}
+                      <td class={`px-4 py-2.5 text-right font-mono text-xs ${gap === null ? "text-[var(--muted)]" : isAlreadyFastest ? "text-[var(--green)]" : "text-[var(--red)]"}`}>
+                        {gap !== null ? (isAlreadyFastest ? "Fastest!" : formatDelta(gap)) : "—"}
                       </td>
                       <td class="px-4 py-2.5 text-right text-[var(--muted)]">
                         {new Date(lap.recorded_at).toLocaleDateString()}
