@@ -178,7 +178,11 @@ export function Laps() {
                       {/* Leaderboard row — one per driver */}
                       <tr
                         onClick={() => toggleExpand(entry.userId)}
-                        class={`border-t border-[var(--border)] cursor-pointer transition-colors ${entry.rank === 1 ? "border-t-0" : ""} ${
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(entry.userId); } }}
+                        tabIndex={0}
+                        role="button"
+                        aria-expanded={isExpanded}
+                        class={`border-t border-[var(--border)] cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${entry.rank === 1 ? "border-t-0" : ""} ${
                           isUser
                             ? "bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10"
                             : "hover:bg-[var(--surface)]"
@@ -242,7 +246,11 @@ export function Laps() {
                           <tr
                             key={lap.id}
                             onClick={() => toggle(lap)}
-                            class={`border-t border-[var(--border)] cursor-pointer transition-colors ${
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(lap); } }}
+                            tabIndex={0}
+                            role="button"
+                            aria-label={`Lap ${lap.lap_number}, ${formatLapTime(lap.lap_time_ms)}`}
+                            class={`border-t border-[var(--border)] cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
                               sel ? "bg-[var(--surface)]" : "bg-[var(--bg)] hover:bg-[var(--surface)]"
                             }`}
                           >
