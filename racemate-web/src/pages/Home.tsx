@@ -48,13 +48,17 @@ interface PersonalBest {
 export function Home() {
   const [recentLaps, setRecentLaps] = useState<LapMetadata[]>([]);
   const [recentSessions, setRecentSessions] = useState<Session[]>([]);
+  const [totalSessionCount, setTotalSessionCount] = useState<number | null>(null);
   const [allMyLaps, setAllMyLaps] = useState<LapMetadata[] | null>(null);
   const { selected, lockedClass, toggle } = useCompare();
   const { user } = useAuth();
 
   useEffect(() => {
     api.laps.list().then((laps) => setRecentLaps(laps.slice(0, 10))).catch(() => {});
-    api.sessions.list().then((sessions) => setRecentSessions(sessions.slice(0, 5))).catch(() => {});
+    api.sessions.list().then((sessions) => {
+      setTotalSessionCount(sessions.length);
+      setRecentSessions(sessions.slice(0, 5));
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -89,6 +93,18 @@ export function Home() {
       }));
   }, [allMyLaps]);
 
+  const stats = useMemo(() => {
+    if (!allMyLaps || allMyLaps.length === 0) return null;
+    const uniqueTracks = new Set(allMyLaps.map((l) => l.track_id)).size;
+    let bestLap: { time: number; track: string } | null = null;
+    for (const lap of allMyLaps) {
+      if (lap.is_valid && (bestLap === null || lap.lap_time_ms < bestLap.time)) {
+        bestLap = { time: lap.lap_time_ms, track: lap.track_name ?? lap.track_id };
+      }
+    }
+    return { totalLaps: allMyLaps.length, uniqueTracks, bestLap };
+  }, [allMyLaps]);
+
   return (
     <div class="max-w-4xl mx-auto flex flex-col gap-14 mt-10">
 
@@ -115,6 +131,25 @@ export function Home() {
           </Link>
         </div>
       </div>
+
+      {/* Stats strip — shown to logged-in users with at least one lap */}
+      {stats && (
+        <div class="flex gap-px bg-[var(--border)] rounded-lg overflow-hidden border border-[var(--border)]">
+          {[
+            { label: "Laps", value: stats.totalLaps },
+            { label: "Tracks", value: stats.uniqueTracks },
+            ...(totalSessionCount !== null ? [{ label: "Sessions", value: totalSessionCount }] : []),
+            ...(stats.bestLap
+              ? [{ label: `Best · ${stats.bestLap.track}`, value: formatLapTime(stats.bestLap.time) }]
+              : []),
+          ].map((stat) => (
+            <div key={stat.label} class="flex-1 bg-[var(--surface)] px-5 py-3 flex flex-col gap-0.5">
+              <span class="text-xl font-bold font-mono">{stat.value}</span>
+              <span class="text-xs text-[var(--muted)] truncate">{stat.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Onboarding checklist — shown to logged-in users with no laps yet */}
       {showOnboarding && (
