@@ -35,24 +35,27 @@ const ONBOARDING_STEPS = [
   {
     label: "Come back here to compare",
     detail: <span>Once your first lap is uploaded it will appear below and you can start comparing.</span>,
-    autoComplete: true,
   },
 ];
 
 export function Home() {
   const [recentLaps, setRecentLaps] = useState<LapMetadata[]>([]);
-  const [lapsLoaded, setLapsLoaded] = useState(false);
+  const [userHasLaps, setUserHasLaps] = useState<boolean | null>(null);
   const { selected, lockedClass, toggle } = useCompare();
   const { user } = useAuth();
 
   useEffect(() => {
-    api.laps.list().then((laps) => {
-      setRecentLaps(laps.slice(0, 10));
-      setLapsLoaded(true);
-    }).catch(() => { setLapsLoaded(true); });
+    api.laps.list().then((laps) => setRecentLaps(laps.slice(0, 10))).catch(() => {});
   }, []);
 
-  const showOnboarding = !!user && lapsLoaded && recentLaps.length === 0;
+  useEffect(() => {
+    if (!user) return;
+    api.laps.list(undefined, user.id)
+      .then((laps) => setUserHasLaps(laps.length > 0))
+      .catch(() => { /* leave null — don't show onboarding on error */ });
+  }, [user]);
+
+  const showOnboarding = !!user && userHasLaps === false;
 
   return (
     <div class="max-w-4xl mx-auto flex flex-col gap-14 mt-10">
@@ -89,20 +92,17 @@ export function Home() {
             <p class="text-sm text-[var(--muted)]">Follow these steps to record and compare your first lap.</p>
           </div>
           <ol class="flex flex-col gap-3">
-            {ONBOARDING_STEPS.map((step, i) => {
-              const done = step.autoComplete && recentLaps.length > 0;
-              return (
-                <li key={i} class={`flex gap-4 border border-[var(--border)] rounded-lg p-4 ${done ? "opacity-60" : ""}`}>
-                  <div class={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold ${done ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-[var(--border)] text-[var(--muted)]"}`}>
-                    {done ? "✓" : i + 1}
-                  </div>
-                  <div class="flex flex-col gap-0.5">
-                    <span class={`text-sm font-medium ${done ? "line-through text-[var(--muted)]" : ""}`}>{step.label}</span>
-                    <span class="text-xs text-[var(--muted)] leading-relaxed">{step.detail}</span>
-                  </div>
-                </li>
-              );
-            })}
+            {ONBOARDING_STEPS.map((step, i) => (
+              <li key={i} class="flex gap-4 border border-[var(--border)] rounded-lg p-4">
+                <div class="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 border-[var(--border)] flex items-center justify-center text-xs font-bold text-[var(--muted)]">
+                  {i + 1}
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-sm font-medium">{step.label}</span>
+                  <span class="text-xs text-[var(--muted)] leading-relaxed">{step.detail}</span>
+                </div>
+              </li>
+            ))}
           </ol>
         </div>
       )}
